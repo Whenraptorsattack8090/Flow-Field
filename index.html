@@ -171,6 +171,32 @@
       cursor: pointer;
     }
 
+    .control-number {
+      display: none;
+      width: 100%;
+      padding: 0.4rem 0.55rem;
+      font-size: 0.8rem;
+      color: #e8f6ff;
+      background: rgba(219, 246, 255, 0.06);
+      border: 1px solid rgba(220, 246, 255, 0.18);
+      border-radius: 0.5rem;
+      font-family: inherit;
+    }
+
+    .control-number:focus {
+      outline: none;
+      border-color: rgba(151, 246, 235, 0.6);
+    }
+
+    /* When numbers-mode is active on the panel, swap which input shows */
+    #controls-panel.numbers-mode .control-slider { display: none; }
+    #controls-panel.numbers-mode .control-number { display: block; }
+
+    #input-mode-toggle[aria-pressed="true"] {
+      background: rgba(116, 232, 220, 0.23);
+      border-color: rgba(151, 246, 235, 0.7);
+    }
+
     .mood-button, .action-button, .toggle-button {
       border: 1px solid rgba(220, 246, 255, 0.15);
       border-radius: 0.65rem;
@@ -265,40 +291,44 @@
       <div class="panel-content">
        <div class="flex items-center justify-between gap-4">
         <h2 class="m-0 text-base font-semibold" style="color: rgb(237, 250, 255); font-size: 24px;">Current settings</h2>
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="rgba(207,250,254,0.7)" aria-hidden="true">
-          <path d="M12 2l1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7L12 2z"></path>
-          <path d="M19 14l0.8 2.2L22 17l-2.2 0.8L19 20l-0.8-2.2L16 17l2.2-0.8L19 14z" opacity="0.7"></path>
-        </svg>
+        <button id="input-mode-toggle" class="toggle-button" type="button" style="padding: 0.4rem 0.6rem; font-size: 0.62rem; margin-left: 0;" aria-pressed="false">Sliders</button>
        </div>
        <div class="divider"></div>
        <div class="space-y-3">
         <div>
          <label class="control-label" for="particle-count"><span>Particles</span><span id="particle-count-value" class="control-value">620</span></label>
-         <input id="particle-count" type="range" min="150" max="1200" step="25" value="620">
+         <input id="particle-count" class="control-slider" type="range" min="150" max="1200" step="25" value="620">
+         <input id="particle-count-number" class="control-number" type="number" step="25" value="620">
         </div>
         <div>
          <label class="control-label" for="particle-speed"><span>Speed</span><span id="particle-speed-value" class="control-value">1.00</span></label>
-         <input id="particle-speed" type="range" min="0.2" max="2.8" step="0.1" value="1">
+         <input id="particle-speed" class="control-slider" type="range" min="0.2" max="2.8" step="0.1" value="1">
+         <input id="particle-speed-number" class="control-number" type="number" step="0.1" value="1">
         </div>
         <div>
          <label class="control-label" for="trail-length"><span>Trail length</span><span id="trail-length-value" class="control-value">18</span></label>
-         <input id="trail-length" type="range" min="4" max="42" step="1" value="18">
+         <input id="trail-length" class="control-slider" type="range" min="4" max="42" step="1" value="18">
+         <input id="trail-length-number" class="control-number" type="number" step="1" value="18">
         </div>
         <div>
          <label class="control-label" for="field-scale"><span>Field scale</span><span id="field-scale-value" class="control-value">0.85</span></label>
-         <input id="field-scale" type="range" min="0.3" max="1.8" step="0.05" value="0.85">
+         <input id="field-scale" class="control-slider" type="range" min="0.3" max="1.8" step="0.05" value="0.85">
+         <input id="field-scale-number" class="control-number" type="number" step="0.05" value="0.85">
         </div>
         <div>
          <label class="control-label" for="turbulence"><span>Turbulence</span><span id="turbulence-value" class="control-value">0.72</span></label>
-         <input id="turbulence" type="range" min="0" max="1.5" step="0.02" value="0.72">
+         <input id="turbulence" class="control-slider" type="range" min="0" max="1.5" step="0.02" value="0.72">
+         <input id="turbulence-number" class="control-number" type="number" step="0.02" value="0.72">
         </div>
         <div>
          <label class="control-label" for="separation"><span>Separation</span><span id="separation-value" class="control-value">0.60</span></label>
-         <input id="separation" type="range" min="0" max="1.5" step="0.02" value="0.6">
+         <input id="separation" class="control-slider" type="range" min="0" max="1.5" step="0.02" value="0.6">
+         <input id="separation-number" class="control-number" type="number" step="0.02" value="0.6">
         </div>
         <div>
          <label class="control-label" for="orbit-distance"><span>Orbit distance</span><span id="orbit-distance-value" class="control-value">140</span></label>
-         <input id="orbit-distance" type="range" min="40" max="360" step="5" value="140">
+         <input id="orbit-distance" class="control-slider" type="range" min="40" max="360" step="5" value="140">
+         <input id="orbit-distance-number" class="control-number" type="number" step="5" value="140">
         </div>
        </div>
        <div class="divider"></div>
@@ -352,7 +382,7 @@
     const ctx = canvas.getContext("2d");
     const cursorCanvas = document.getElementById("cursor-canvas");
     const cctx = cursorCanvas.getContext("2d");
-    const controls = {
+    const sliderControls = {
       count: document.getElementById("particle-count"),
       speed: document.getElementById("particle-speed"),
       trails: document.getElementById("trail-length"),
@@ -360,6 +390,15 @@
       turbulence: document.getElementById("turbulence"),
       separation: document.getElementById("separation"),
       orbitDistance: document.getElementById("orbit-distance")
+    };
+    const numberControls = {
+      count: document.getElementById("particle-count-number"),
+      speed: document.getElementById("particle-speed-number"),
+      trails: document.getElementById("trail-length-number"),
+      scale: document.getElementById("field-scale-number"),
+      turbulence: document.getElementById("turbulence-number"),
+      separation: document.getElementById("separation-number"),
+      orbitDistance: document.getElementById("orbit-distance-number")
     };
     const output = {
       count: document.getElementById("particle-count-value"),
@@ -580,17 +619,60 @@
       requestAnimationFrame(draw);
     }
 
-    function updateValue(key) {
-      const value = Number(controls[key].value);
-      settings[key] = value;
-      output[key].textContent = (key === "speed" || key === "scale" || key === "turbulence" || key === "separation")
+    function formatDisplay(key, value) {
+      return (key === "speed" || key === "scale" || key === "turbulence" || key === "separation")
         ? value.toFixed(2)
         : value;
+    }
+
+    // Shared by both the slider and the number box for a given setting, so
+    // whichever one you're using stays in sync with the other and with the
+    // live value shown next to the label.
+    function applyValue(key, value, sourceEl) {
+      settings[key] = value;
+      output[key].textContent = formatDisplay(key, value);
+
+      // No ceiling or floor on typed values - the slider stretches its own
+      // min/max in either direction to match whatever's been entered,
+      // instead of ever clamping or rejecting it.
+      const slider = sliderControls[key];
+      if (value > Number(slider.max)) slider.max = value;
+      if (value < Number(slider.min)) slider.min = value;
+
+      if (sourceEl !== sliderControls[key]) sliderControls[key].value = value;
+      if (sourceEl !== numberControls[key]) numberControls[key].value = value;
+
       if (key === "count") buildParticles();
     }
 
-    Object.keys(controls).forEach((key) => {
-      controls[key].addEventListener("input", () => updateValue(key));
+    Object.keys(sliderControls).forEach((key) => {
+      sliderControls[key].addEventListener("input", () => {
+        applyValue(key, Number(sliderControls[key].value), sliderControls[key]);
+      });
+
+      // Commit on blur/Enter (not every keystroke) so typing a multi-digit
+      // number doesn't get interrupted partway through. No clamping here -
+      // whatever you type is exactly what gets applied.
+      numberControls[key].addEventListener("change", () => {
+        const raw = numberControls[key].value;
+        if (raw === "") return;
+        const value = Number(raw);
+        if (Number.isNaN(value)) return;
+        applyValue(key, value, numberControls[key]);
+      });
+      numberControls[key].addEventListener("keydown", (event) => {
+        if (event.key === "Enter") numberControls[key].blur();
+      });
+    });
+
+    const inputModeToggle = document.getElementById("input-mode-toggle");
+    const controlsPanelEl = document.getElementById("controls-panel");
+    let numbersMode = false;
+    inputModeToggle.addEventListener("click", () => {
+      numbersMode = !numbersMode;
+      controlsPanelEl.classList.toggle("numbers-mode", numbersMode);
+      inputModeToggle.textContent = numbersMode ? "Numbers" : "Sliders";
+      inputModeToggle.setAttribute("aria-pressed", String(numbersMode));
     });
 
     document.querySelectorAll("[data-preset]").forEach((button) => {
@@ -685,7 +767,7 @@
     });
 
     resize();
-    Object.keys(controls).forEach(updateValue);
+    Object.keys(sliderControls).forEach((key) => applyValue(key, settings[key]));
     requestAnimationFrame(draw);
   </script>
 </body></html>
