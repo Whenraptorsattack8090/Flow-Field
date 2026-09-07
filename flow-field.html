@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Field</title>
+  <style>
+    :root {
+      --panel: rgba(8, 18, 30, 0.74);
+      --line: rgba(198, 238, 255, 0.16);
+      --ink: #e8f6ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    /* ---- minimal utility classes (replaces the Tailwind CDN script) ---- */
+    .m-0 { margin: 0; }
+    .mt-1 { margin-top: 0.25rem; }
+    .mt-2 { margin-top: 0.5rem; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-4 { gap: 1rem; }
+    .text-xs { font-size: 0.75rem; line-height: 1rem; }
+    .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+    .text-base { font-size: 1rem; line-height: 1.5rem; }
+    .font-semibold { font-weight: 600; }
+    .tracking-wide { letter-spacing: 0.025em; }
+    .tracking-widest { letter-spacing: 0.1em; }
+    .uppercase { text-transform: uppercase; }
+    .leading-relaxed { line-height: 1.625; }
+    .max-w-xs { max-width: 20rem; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .justify-between { justify-content: space-between; }
+    .justify-center { justify-content: center; }
+    .grid { display: grid; }
+    .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .space-y-3 > * + * { margin-top: 0.75rem; }
+    .hidden { display: none; }
+    /* ---------------------------------------------------------------- */
+
+    body {
+      margin: 0;
+      width: 100%;
+      min-height: calc(100 * min(var(--vh, 1vh), 1vh));
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      background: #02070d;
+    }
+
+    #flow-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      cursor: none;
+    }
+
+    #cursor-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .atmosphere {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 76% 15%, rgba(34, 141, 164, 0.18), transparent 34%),
+        radial-gradient(circle at 10% 88%, rgba(76, 65, 170, 0.16), transparent 32%);
+      mix-blend-mode: screen;
+    }
+
+    /* wraps header + control shell so Shift+Tab can hide both together */
+    .app-ui {
+      transition: opacity 220ms ease;
+    }
+
+    .app-ui.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .hidden-hint {
+      position: fixed;
+      z-index: 4;
+      left: clamp(1rem, 3vw, 2.5rem);
+      top: clamp(1rem, 3vw, 2.5rem);
+      font-size: 0.64rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(225, 246, 255, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease;
+    }
+
+    .hidden-hint.is-visible {
+      opacity: 1;
+    }
+
+    .quiet-ui {
+      position: fixed;
+      z-index: 2;
+      left: clamp(1rem, 3vw, 2.5rem);
+      top: clamp(1rem, 3vw, 2.5rem);
+      pointer-events: none;
+      animation: drift-in 900ms ease-out both;
+    }
+
+    .control-shell {
+      position: fixed;
+      z-index: 3;
+      right: clamp(1rem, 3vw, 2.5rem);
+      bottom: clamp(1rem, 3vw, 2.5rem);
+      width: min(20rem, calc(100% - 2rem));
+      animation: drift-in 900ms 120ms ease-out both;
+    }
+
+    .glass-panel {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 1.15rem;
+      background: var(--panel);
+      box-shadow: 0 1.2rem 4rem rgba(0, 0, 0, 0.34);
+      backdrop-filter: blur(18px);
+      transition: opacity 260ms ease, transform 260ms ease, max-height 300ms ease, margin 300ms ease;
+    }
+
+    .glass-panel.is-hidden {
+      opacity: 0;
+      transform: translateY(0.75rem) scale(0.98);
+      max-height: 0;
+      margin-top: 0;
+      border-width: 0;
+      pointer-events: none;
+    }
+
+    .panel-content {
+      padding: 1rem;
+    }
+
+    .control-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 0.3rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(232, 246, 255, 0.7);
+    }
+
+    .control-value {
+      color: #e8f6ff;
+      font-size: 0.72rem;
+      letter-spacing: 0;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 0.25rem;
+      accent-color: #74e8dc;
+      cursor: pointer;
+    }
+
+    .mood-button, .action-button, .toggle-button {
+      border: 1px solid rgba(220, 246, 255, 0.15);
+      border-radius: 0.65rem;
+      background: rgba(219, 246, 255, 0.06);
+      color: #dff6ff;
+      font-weight: 600;
+      font-size: 0.75rem;
+      transition: transform 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .mood-button:hover, .action-button:hover, .toggle-button:hover,
+    .mood-button:focus-visible, .action-button:focus-visible, .toggle-button:focus-visible {
+      transform: translateY(-1px);
+      background: rgba(107, 225, 218, 0.16);
+      border-color: rgba(151, 246, 235, 0.54);
+      outline: none;
+    }
+
+    .mood-button.is-active {
+      background: rgba(116, 232, 220, 0.28);
+      border-color: rgba(151, 246, 235, 0.85);
+      box-shadow: 0 0 0 1px rgba(151, 246, 235, 0.35), 0 6px 16px rgba(107, 225, 218, 0.28);
+    }
+
+    .mood-button.is-active::before {
+      content: "\2713  ";
+    }
+
+    .toggle-button {
+      margin-left: auto;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      backdrop-filter: blur(12px);
+    }
+
+    .action-button {
+      min-height: 2.45rem;
+      padding: 0.55rem 0.7rem;
+      font-size: 0.74rem;
+      font-weight: 600;
+    }
+
+    .divider {
+      height: 1px;
+      margin: 0.95rem 0;
+      background: rgba(220, 246, 255, 0.1);
+    }
+
+    @keyframes drift-in {
+      from { opacity: 0; transform: translateY(0.9rem); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 640px) {
+      .control-shell {
+        bottom: 1rem;
+      }
+
+      .quiet-ui {
+        left: 1rem;
+      }
+
+      .glass-panel {
+        max-height: calc(75 * min(var(--vh, 1vh), 1vh));
+        overflow-y: auto;
+      }
+    }
+  </style>
+ </head>
+ <body style="background: rgb(2, 7, 13);">
+  <canvas id="flow-canvas" aria-label="Animated generative flow field"></canvas>
+  <div class="atmosphere" aria-hidden="true"></div>
+  <canvas id="cursor-canvas" aria-hidden="true"></canvas>
+
+  <div class="app-ui" id="app-ui">
+    <header class="quiet-ui">
+     <p class="m-0 font-semibold tracking-wide" style="color: rgb(237, 250, 255); font-size: 19px;">Flow Field</p>
+     <p class="mt-1 max-w-xs text-sm leading-relaxed" style="color: rgb(167, 196, 211); line-height: 1.45;">Move your pointer to stir the current.</p>
+    </header>
+    <aside class="control-shell" aria-label="Flow field controls">
+     <button id="controls-toggle" class="toggle-button flex items-center gap-2" type="button" aria-expanded="true" aria-controls="controls-panel" style="background: rgba(8, 18, 30, 0.74); color: rgb(223, 246, 255);">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="4" y1="6" x2="20" y2="6"></line><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"></circle>
+        <line x1="4" y1="12" x2="20" y2="12"></line><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"></circle>
+        <line x1="4" y1="18" x2="20" y2="18"></line><circle cx="7" cy="18" r="2" fill="currentColor" stroke="none"></circle>
+      </svg>
+      <span style="color: rgb(223, 246, 255); font-weight: 600; font-size: 16px;">Controls</span>
+     </button>
+     <section id="controls-panel" class="glass-panel mt-2" aria-label="Artwork settings" style="background: rgba(8, 18, 30, 0.74);">
+      <div class="panel-content">
+       <div class="flex items-center justify-between gap-4">
+        <h2 class="m-0 text-base font-semibold" style="color: rgb(237, 250, 255); font-size: 24px;">Current settings</h2>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="rgba(207,250,254,0.7)" aria-hidden="true">
+          <path d="M12 2l1.7 5.3L19 9l-5.3 1.7L12 16l-1.7-5.3L5 9l5.3-1.7L12 2z"></path>
+          <path d="M19 14l0.8 2.2L22 17l-2.2 0.8L19 20l-0.8-2.2L16 17l2.2-0.8L19 14z" opacity="0.7"></path>
+        </svg>
+       </div>
+       <div class="divider"></div>
+       <div class="space-y-3">
+        <div>
+         <label class="control-label" for="particle-count"><span>Particles</span><span id="particle-count-value" class="control-value">620</span></label>
+         <input id="particle-count" type="range" min="150" max="1200" step="25" value="620">
+        </div>
+        <div>
+         <label class="control-label" for="particle-speed"><span>Speed</span><span id="particle-speed-value" class="control-value">1.00</span></label>
+         <input id="particle-speed" type="range" min="0.2" max="2.8" step="0.1" value="1">
+        </div>
+        <div>
+         <label class="control-label" for="trail-length"><span>Trail length</span><span id="trail-length-value" class="control-value">18</span></label>
+         <input id="trail-length" type="range" min="4" max="42" step="1" value="18">
+        </div>
+        <div>
+         <label class="control-label" for="field-scale"><span>Field scale</span><span id="field-scale-value" class="control-value">0.85</span></label>
+         <input id="field-scale" type="range" min="0.3" max="1.8" step="0.05" value="0.85">
+        </div>
+        <div>
+         <label class="control-label" for="turbulence"><span>Turbulence</span><span id="turbulence-value" class="control-value">0.72</span></label>
+         <input id="turbulence" type="range" min="0" max="1.5" step="0.02" value="0.72">
+        </div>
+        <div>
+         <label class="control-label" for="separation"><span>Separation</span><span id="separation-value" class="control-value">0.60</span></label>
+         <input id="separation" type="range" min="0" max="1.5" step="0.02" value="0.6">
+        </div>
+        <div>
+         <label class="control-label" for="orbit-distance"><span>Orbit distance</span><span id="orbit-distance-value" class="control-value">140</span></label>
+         <input id="orbit-distance" type="range" min="40" max="360" step="5" value="140">
+        </div>
+       </div>
+       <div class="divider"></div>
+       <div class="flex items-center justify-between mb-2">
+        <h3 class="text-xs font-semibold uppercase tracking-widest m-0" style="color: rgb(185, 214, 226); font-size: 19px;">Pointer mode</h3>
+        <span id="mode-active-label" class="control-value" style="text-transform: none; letter-spacing: 0;">Pull</span>
+       </div>
+       <div class="grid grid-cols-3 gap-2">
+        <button class="mood-button is-active" type="button" data-mode="pull">Pull</button>
+        <button class="mood-button" type="button" data-mode="orbit">Orbit</button>
+        <button class="mood-button" type="button" data-mode="push">Push</button>
+       </div>
+       <p class="m-0 mt-1" style="font-size: 0.62rem; letter-spacing: 0.04em; color: rgba(185, 214, 226, 0.45);">Keys 1 / 2 / 3 also switch modes</p>
+       <div class="divider"></div>
+       <div class="flex items-center justify-between mb-2">
+        <h3 class="text-xs font-semibold uppercase tracking-widest m-0" style="color: rgb(185, 214, 226); font-size: 19px;">Mood</h3>
+        <span id="mood-active-label" class="control-value" style="text-transform: none; letter-spacing: 0;">Dreamy</span>
+       </div>
+       <div class="grid grid-cols-4 gap-2">
+        <button class="mood-button is-active" type="button" data-preset="dreamy">Dreamy</button>
+        <button class="mood-button" type="button" data-preset="ocean">Ocean</button>
+        <button class="mood-button" type="button" data-preset="aurora">Aurora</button>
+        <button class="mood-button" type="button" data-preset="storm">Storm</button>
+       </div>
+       <div class="divider"></div>
+       <div class="grid grid-cols-2 gap-2">
+        <button id="pause-button" class="action-button flex items-center justify-center gap-2" type="button" style="background: rgba(219, 246, 255, 0.06); color: rgb(223, 246, 255);">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+         <span style="color: rgb(223, 246, 255); font-weight: 600; font-size: 16px;">Pause</span>
+        </button>
+        <button id="resume-button" class="action-button hidden items-center justify-center gap-2" type="button" style="background: rgba(219, 246, 255, 0.06); color: rgb(223, 246, 255);">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>
+         <span style="color: rgb(223, 246, 255); font-weight: 600; font-size: 16px;">Resume</span>
+        </button>
+        <button id="reset-button" class="action-button flex items-center justify-center gap-2" type="button" style="background: rgba(219, 246, 255, 0.06); color: rgb(223, 246, 255);">
+         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+           <path d="M3 12a9 9 0 1 0 3-6.7"></path><polyline points="3 4 3 9 8 9"></polyline>
+         </svg>
+         <span style="color: rgb(223, 246, 255); font-weight: 600; font-size: 16px;">Reset field</span>
+        </button>
+       </div>
+      </div>
+     </section>
+    </aside>
+  </div>
+
+  <div class="hidden-hint" id="hidden-hint" aria-hidden="true">shift + tab</div>
+
+  <script>
+    const canvas = document.getElementById("flow-canvas");
+    const ctx = canvas.getContext("2d");
+    const cursorCanvas = document.getElementById("cursor-canvas");
+    const cctx = cursorCanvas.getContext("2d");
+    const controls = {
+      count: document.getElementById("particle-count"),
+      speed: document.getElementById("particle-speed"),
+      trails: document.getElementById("trail-length"),
+      scale: document.getElementById("field-scale"),
+      turbulence: document.getElementById("turbulence"),
+      separation: document.getElementById("separation"),
+      orbitDistance: document.getElementById("orbit-distance")
+    };
+    const output = {
+      count: document.getElementById("particle-count-value"),
+      speed: document.getElementById("particle-speed-value"),
+      trails: document.getElementById("trail-length-value"),
+      scale: document.getElementById("field-scale-value"),
+      turbulence: document.getElementById("turbulence-value"),
+      separation: document.getElementById("separation-value"),
+      orbitDistance: document.getElementById("orbit-distance-value")
+    };
+
+    const palettes = {
+      dreamy: ["#dcb9ff", "#92b7ff", "#ffb7e2", "#a7f7f1"],
+      ocean: ["#7de8ff", "#1aa7d7", "#94ffd9", "#4985ff"],
+      aurora: ["#6dffcb", "#9eff7c", "#9b8cff", "#5eeaff"],
+      storm: ["#d9e8ff", "#668ec9", "#91a9cf", "#c6d5e5"]
+    };
+
+    let width = 0, height = 0, particles = [], running = true;
+    let time = 0, seed = Math.random() * 1000, palette = palettes.dreamy;
+    let pointer = { x: -1000, y: -1000, active: false };
+    let settings = {
+      count: 620,
+      speed: 1,
+      trails: 18,
+      scale: 0.85,
+      turbulence: 0.72,
+      separation: 0.6,
+      mode: "pull",
+      orbitDistance: 140
+    };
+
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function makeParticle() {
+      return {
+        x: random(0, width),
+        y: random(0, height),
+        px: 0,
+        py: 0,
+        age: random(0, 400),
+        size: random(0.5, 1.85),
+        color: palette[Math.floor(Math.random() * palette.length)],
+        alpha: random(0.28, 0.9),
+        phase: random(0, Math.PI * 2),
+        wander: random(0.6, 1.4),
+        laneOffset: random(-1, 1)
+      };
+    }
+
+    function resize() {
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * ratio);
+      canvas.height = Math.floor(height * ratio);
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      cursorCanvas.width = Math.floor(width * ratio);
+      cursorCanvas.height = Math.floor(height * ratio);
+      cursorCanvas.style.width = width + "px";
+      cursorCanvas.style.height = height + "px";
+      cctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      if (!particles.length) buildParticles();
+    }
+
+    function buildParticles() {
+      const desired = settings.count;
+      if (particles.length > desired) {
+        particles.length = desired;
+      } else {
+        while (particles.length < desired) particles.push(makeParticle());
+      }
+    }
+
+    function resetField() {
+      seed = Math.random() * 10000;
+      particles = Array.from({ length: settings.count }, makeParticle);
+      ctx.fillStyle = "#02070d";
+      ctx.fillRect(0, 0, width, height);
+    }
+
+    function fieldAt(x, y, p) {
+      const phase = p ? p.phase : 0;
+      const wander = p ? p.wander : 1;
+      const laneOffset = p ? p.laneOffset : 0;
+      const sep = settings.separation;
+
+      const jitterX = Math.cos(phase) * sep * 26;
+      const jitterY = Math.sin(phase) * sep * 26;
+
+      const nx = ((x + jitterX) / Math.max(width, 1)) * settings.scale * 7;
+      const ny = ((y + jitterY) / Math.max(height, 1)) * settings.scale * 7;
+      const waveA = Math.sin(nx + time * 0.00025 + seed + phase * 0.4) * 1.15;
+      const waveB = Math.cos(ny * 1.38 - time * 0.00019 + seed * 0.31 + phase * 0.4) * 1.05;
+      const waveC = Math.sin((nx + ny) * 0.72 + time * 0.00017) * settings.turbulence;
+      const personalDrift = Math.sin(time * 0.0003 * wander + phase) * sep * 0.9 * laneOffset;
+
+      const baseAngle = waveA + waveB + waveC + personalDrift;
+      if (!pointer.active) return baseAngle;
+
+      const dx = x - pointer.x;
+      const dy = y - pointer.y;
+      const distance = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+      const outwardX = dx / distance;
+      const outwardY = dy / distance;
+
+      let influence, desiredX, desiredY;
+
+      if (settings.mode === "orbit") {
+        // Orbit uses a wide, mostly-constant capture zone around the ring
+        // (instead of a taper that peaks only right at the ring) so the
+        // orbit pull stays dominant over the ambient current across the
+        // whole zone. A taper that dips in the middle left a spot where
+        // ambient flow and orbit pull could nearly cancel out, letting
+        // particles fly off unpredictably instead of settling into a loop.
+        const ring = settings.orbitDistance;
+        const captureRadius = Math.max(220, ring * 1.8);
+        if (distance > captureRadius) return baseAngle;
+
+        // only taper in the outer slice of the capture zone, for a smooth
+        // hand-off back to the ambient flow instead of a hard cutoff
+        const edgeBand = captureRadius * 0.25;
+        influence = distance > captureRadius - edgeBand
+          ? Math.max(0, (captureRadius - distance) / edgeBand)
+          : 1;
+
+        const bandWidth = Math.max(70, ring * 0.6);
+        const distFromRing = distance - ring; // > 0 too far out, < 0 too close in
+        const radialPull = Math.max(-1, Math.min(1, -distFromRing / bandWidth));
+        const tangentialStrength = Math.max(0, 1 - Math.abs(distFromRing) / (bandWidth * 1.4));
+
+        const tangentX = -outwardY;
+        const tangentY = outwardX;
+        desiredX = tangentX * tangentialStrength + outwardX * radialPull * (1 - tangentialStrength * 0.4);
+        desiredY = tangentY * tangentialStrength + outwardY * radialPull * (1 - tangentialStrength * 0.4);
+        const len = Math.sqrt(desiredX * desiredX + desiredY * desiredY) || 1;
+        desiredX /= len;
+        desiredY /= len;
+      } else {
+        influence = Math.max(0, 1 - distance / 190);
+        if (influence <= 0) return baseAngle;
+        if (settings.mode === "pull") {
+          desiredX = -outwardX;
+          desiredY = -outwardY;
+        } else {
+          // push
+          desiredX = outwardX;
+          desiredY = outwardY;
+        }
+      }
+
+      // Blend the ambient flow direction with the desired pointer direction.
+      // Orbit stays close to fully in control throughout its capture zone so
+      // the loop actually holds; pull/push leave a little more ambient noise.
+      const weight = influence * (settings.mode === "orbit" ? 0.97 : 0.9);
+      const baseX = Math.cos(baseAngle);
+      const baseY = Math.sin(baseAngle);
+      const blendX = baseX * (1 - weight) + desiredX * weight;
+      const blendY = baseY * (1 - weight) + desiredY * weight;
+      return Math.atan2(blendY, blendX);
+    }
+
+    function draw() {
+      if (!running) return;
+      time += 16;
+      const fade = Math.max(0.025, 0.15 - settings.trails * 0.003);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = `rgba(2, 7, 13, ${fade})`;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.globalCompositeOperation = "lighter";
+      for (const p of particles) {
+        p.px = p.x;
+        p.py = p.y;
+        const angle = fieldAt(p.x, p.y, p);
+        const velocity = settings.speed * (0.72 + p.size * 0.42);
+        p.x += Math.cos(angle) * velocity;
+        p.y += Math.sin(angle) * velocity;
+
+        if (p.x < -4) { p.x = width + 3; p.px = p.x; }
+        if (p.x > width + 4) { p.x = -3; p.px = p.x; }
+        if (p.y < -4) { p.y = height + 3; p.py = p.y; }
+        if (p.y > height + 4) { p.y = -3; p.py = p.y; }
+
+        ctx.beginPath();
+        ctx.strokeStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.lineWidth = p.size;
+        ctx.moveTo(p.px, p.py);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      // The cursor dot lives on its own canvas that gets fully cleared
+      // every frame (no trail-fade applied to it), so it never leaves an
+      // after-image behind as it moves - only the particle trails do.
+      cctx.clearRect(0, 0, width, height);
+      if (pointer.active) {
+        cctx.beginPath();
+        cctx.arc(pointer.x, pointer.y, 6, 0, Math.PI * 2);
+        cctx.strokeStyle = "rgba(232, 246, 255, 0.35)";
+        cctx.lineWidth = 1;
+        cctx.stroke();
+
+        cctx.beginPath();
+        cctx.arc(pointer.x, pointer.y, 2.5, 0, Math.PI * 2);
+        cctx.fillStyle = "rgba(232, 246, 255, 0.95)";
+        cctx.fill();
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    function updateValue(key) {
+      const value = Number(controls[key].value);
+      settings[key] = value;
+      output[key].textContent = (key === "speed" || key === "scale" || key === "turbulence" || key === "separation")
+        ? value.toFixed(2)
+        : value;
+      if (key === "count") buildParticles();
+    }
+
+    Object.keys(controls).forEach((key) => {
+      controls[key].addEventListener("input", () => updateValue(key));
+    });
+
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        palette = palettes[button.dataset.preset];
+        particles.forEach((particle) => {
+          particle.color = palette[Math.floor(Math.random() * palette.length)];
+        });
+        document.querySelectorAll("[data-preset]").forEach((item) => item.classList.remove("is-active"));
+        button.classList.add("is-active");
+        document.getElementById("mood-active-label").textContent = button.textContent.trim();
+      });
+    });
+
+    function toggleControlsPanel() {
+      const panel = document.getElementById("controls-panel");
+      const hiddenState = panel.classList.toggle("is-hidden");
+      document.getElementById("controls-toggle").setAttribute("aria-expanded", String(!hiddenState));
+    }
+
+    document.getElementById("controls-toggle").addEventListener("click", toggleControlsPanel);
+
+    function selectMode(mode) {
+      const button = document.querySelector(`[data-mode="${mode}"]`);
+      if (!button) return;
+      settings.mode = mode;
+      document.querySelectorAll("[data-mode]").forEach((item) => item.classList.remove("is-active"));
+      button.classList.add("is-active");
+      document.getElementById("mode-active-label").textContent = button.textContent.trim();
+    }
+
+    document.querySelectorAll("[data-mode]").forEach((button) => {
+      button.addEventListener("click", () => selectMode(button.dataset.mode));
+    });
+
+    document.getElementById("pause-button").addEventListener("click", () => {
+      running = false;
+      document.getElementById("pause-button").classList.add("hidden");
+      document.getElementById("resume-button").classList.remove("hidden");
+      document.getElementById("resume-button").classList.add("flex");
+    });
+
+    document.getElementById("resume-button").addEventListener("click", () => {
+      running = true;
+      document.getElementById("resume-button").classList.add("hidden");
+      document.getElementById("resume-button").classList.remove("flex");
+      document.getElementById("pause-button").classList.remove("hidden");
+      requestAnimationFrame(draw);
+    });
+
+    document.getElementById("reset-button").addEventListener("click", resetField);
+
+    function setPointer(event) {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = event.clientX - rect.left;
+      pointer.y = event.clientY - rect.top;
+      pointer.active = true;
+    }
+
+    canvas.addEventListener("pointermove", setPointer);
+    canvas.addEventListener("pointerdown", setPointer);
+    canvas.addEventListener("pointerleave", () => pointer.active = false);
+    canvas.addEventListener("pointerup", () => pointer.active = false);
+    window.addEventListener("resize", resize);
+
+    let uiHidden = false;
+    const appUi = document.getElementById("app-ui");
+    const hiddenHint = document.getElementById("hidden-hint");
+
+    function setUiHidden(hide) {
+      uiHidden = hide;
+      appUi.classList.toggle("is-hidden", hide);
+      hiddenHint.classList.toggle("is-visible", hide);
+    }
+
+    const modeShortcuts = { "1": "pull", "2": "orbit", "3": "push" };
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Tab" && event.shiftKey) {
+        event.preventDefault();
+        setUiHidden(!uiHidden);
+        return;
+      }
+      // Skip while a form control (like a slider) has focus, so number keys
+      // used for mode-switching don't collide with editing a control.
+      const activeTag = document.activeElement ? document.activeElement.tagName : "";
+      if (activeTag === "INPUT" || activeTag === "SELECT" || activeTag === "TEXTAREA") return;
+
+      if (modeShortcuts[event.key]) {
+        selectMode(modeShortcuts[event.key]);
+      }
+    });
+
+    resize();
+    Object.keys(controls).forEach(updateValue);
+    requestAnimationFrame(draw);
+  </script>
+</body></html>
