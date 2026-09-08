@@ -188,6 +188,49 @@
       border-color: rgba(151, 246, 235, 0.6);
     }
 
+    .color-swatch {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 2.6rem;
+      padding: 0;
+      border: 1px solid rgba(220, 246, 255, 0.15);
+      border-radius: 0.65rem;
+      background: none;
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease;
+    }
+
+    .color-swatch:hover, .color-swatch:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(151, 246, 235, 0.54);
+      outline: none;
+    }
+
+    .color-swatch::-webkit-color-swatch-wrapper {
+      padding: 0.3rem;
+    }
+
+    .color-swatch::-webkit-color-swatch {
+      border: none;
+      border-radius: 0.45rem;
+    }
+
+    .color-swatch::-moz-color-swatch {
+      border: none;
+      border-radius: 0.45rem;
+    }
+
+    .bg-color-2 {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+
+    #controls-panel.bg-gradient .bg-color-2 {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     /* When numbers-mode is active on the panel, swap which input shows */
     #controls-panel.numbers-mode .control-slider { display: none; }
     #controls-panel.numbers-mode .control-number { display: block; }
@@ -297,7 +340,7 @@
        <div class="space-y-3">
         <div>
          <label class="control-label" for="particle-count"><span>Particles</span><span id="particle-count-value" class="control-value">620</span></label>
-         <input id="particle-count" class="control-slider" type="range" min="150" max="1200" step="25" value="620">
+         <input id="particle-count" class="control-slider" type="range" min="0" max="3000" step="25" value="620">
          <input id="particle-count-number" class="control-number" type="number" step="25" value="620">
         </div>
         <div>
@@ -343,15 +386,21 @@
        </div>
        <p class="m-0 mt-1" style="font-size: 0.62rem; letter-spacing: 0.04em; color: rgba(185, 214, 226, 0.45);">Keys 1 / 2 / 3 also switch modes</p>
        <div class="divider"></div>
-       <div class="flex items-center justify-between mb-2">
-        <h3 class="text-xs font-semibold uppercase tracking-widest m-0" style="color: rgb(185, 214, 226); font-size: 19px;">Mood</h3>
-        <span id="mood-active-label" class="control-value" style="text-transform: none; letter-spacing: 0;">Dreamy</span>
+       <h3 class="text-xs font-semibold uppercase tracking-widest m-0 mb-2" style="color: rgb(185, 214, 226); font-size: 19px;">Colors</h3>
+       <div class="grid grid-cols-3 gap-2">
+        <input type="color" id="color-1" class="color-swatch" value="#dcb9ff" aria-label="Color 1">
+        <input type="color" id="color-2" class="color-swatch" value="#92b7ff" aria-label="Color 2">
+        <input type="color" id="color-3" class="color-swatch" value="#ffb7e2" aria-label="Color 3">
        </div>
-       <div class="grid grid-cols-4 gap-2">
-        <button class="mood-button is-active" type="button" data-preset="dreamy">Dreamy</button>
-        <button class="mood-button" type="button" data-preset="ocean">Ocean</button>
-        <button class="mood-button" type="button" data-preset="aurora">Aurora</button>
-        <button class="mood-button" type="button" data-preset="storm">Storm</button>
+       <div class="divider"></div>
+       <h3 class="text-xs font-semibold uppercase tracking-widest m-0 mb-2" style="color: rgb(185, 214, 226); font-size: 19px;">Background</h3>
+       <div class="grid grid-cols-2 gap-2 mb-2">
+        <button class="mood-button is-active" type="button" data-bg-mode="solid">Solid</button>
+        <button class="mood-button" type="button" data-bg-mode="gradient">Gradient</button>
+       </div>
+       <div class="grid grid-cols-2 gap-2">
+        <input type="color" id="bg-color-1" class="color-swatch" value="#02070d" aria-label="Background color 1">
+        <input type="color" id="bg-color-2" class="color-swatch bg-color-2" value="#1a1240" aria-label="Background color 2 (gradient end)">
        </div>
        <div class="divider"></div>
        <div class="grid grid-cols-2 gap-2">
@@ -410,15 +459,11 @@
       orbitDistance: document.getElementById("orbit-distance-value")
     };
 
-    const palettes = {
-      dreamy: ["#dcb9ff", "#92b7ff", "#ffb7e2", "#a7f7f1"],
-      ocean: ["#7de8ff", "#1aa7d7", "#94ffd9", "#4985ff"],
-      aurora: ["#6dffcb", "#9eff7c", "#9b8cff", "#5eeaff"],
-      storm: ["#d9e8ff", "#668ec9", "#91a9cf", "#c6d5e5"]
-    };
-
     let width = 0, height = 0, particles = [], running = true;
-    let time = 0, seed = Math.random() * 1000, palette = palettes.dreamy;
+    let time = 0, seed = Math.random() * 1000;
+    let palette = ["#dcb9ff", "#92b7ff", "#ffb7e2"];
+    let backgroundMode = "solid";
+    let backgroundColors = ["#02070d", "#1a1240"];
     let pointer = { x: -1000, y: -1000, active: false };
     let settings = {
       count: 620,
@@ -479,10 +524,24 @@
       }
     }
 
+    // Returns either a solid color string or a CanvasGradient, so the same
+    // fillRect call in the draw loop works for both background modes -
+    // ctx.globalAlpha handles the trail-fade transparency either way.
+    function getBackgroundFill() {
+      if (backgroundMode === "gradient") {
+        const gradient = ctx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, backgroundColors[0]);
+        gradient.addColorStop(1, backgroundColors[1]);
+        return gradient;
+      }
+      return backgroundColors[0];
+    }
+
     function resetField() {
       seed = Math.random() * 10000;
       particles = Array.from({ length: settings.count }, makeParticle);
-      ctx.fillStyle = "#02070d";
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = getBackgroundFill();
       ctx.fillRect(0, 0, width, height);
     }
 
@@ -572,8 +631,10 @@
       time += 16;
       const fade = Math.max(0.025, 0.15 - settings.trails * 0.003);
       ctx.globalCompositeOperation = "source-over";
-      ctx.fillStyle = `rgba(2, 7, 13, ${fade})`;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = getBackgroundFill();
       ctx.fillRect(0, 0, width, height);
+      ctx.globalAlpha = 1;
 
       ctx.globalCompositeOperation = "lighter";
       for (const p of particles) {
@@ -675,15 +736,36 @@
       inputModeToggle.setAttribute("aria-pressed", String(numbersMode));
     });
 
-    document.querySelectorAll("[data-preset]").forEach((button) => {
-      button.addEventListener("click", () => {
-        palette = palettes[button.dataset.preset];
+    const colorInputs = [
+      document.getElementById("color-1"),
+      document.getElementById("color-2"),
+      document.getElementById("color-3")
+    ];
+    colorInputs.forEach((input, index) => {
+      input.addEventListener("input", () => {
+        palette[index] = input.value;
         particles.forEach((particle) => {
           particle.color = palette[Math.floor(Math.random() * palette.length)];
         });
-        document.querySelectorAll("[data-preset]").forEach((item) => item.classList.remove("is-active"));
+      });
+    });
+
+    const bgColorInputs = [
+      document.getElementById("bg-color-1"),
+      document.getElementById("bg-color-2")
+    ];
+    bgColorInputs.forEach((input, index) => {
+      input.addEventListener("input", () => {
+        backgroundColors[index] = input.value;
+      });
+    });
+
+    document.querySelectorAll("[data-bg-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        backgroundMode = button.dataset.bgMode;
+        document.querySelectorAll("[data-bg-mode]").forEach((item) => item.classList.remove("is-active"));
         button.classList.add("is-active");
-        document.getElementById("mood-active-label").textContent = button.textContent.trim();
+        controlsPanelEl.classList.toggle("bg-gradient", backgroundMode === "gradient");
       });
     });
 
